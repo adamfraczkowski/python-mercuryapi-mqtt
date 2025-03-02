@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "python-mercuryapi-mqtt"
+version = "0.0.1"
+description = "Python mercuryapi mqtt driver"
+authors = ["AFraczkowski"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+paho-mqtt = "^2.1.0"
+python-mercuryapi = "^0.5.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

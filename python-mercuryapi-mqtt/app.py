@@ -8,10 +8,11 @@ import mercury
 
 MQTT_BROKER    = os.getenv("MQTT_BROKER", "localhost")
 MQTT_PORT      = int(os.getenv("MQTT_PORT", "1883"))
-TOPIC_START    = os.getenv("MQTT_TOPIC_START", "reader/start")
-TOPIC_STOP     = os.getenv("MQTT_TOPIC_STOP", "reader/stop")
-TOPIC_OUTPUT   = os.getenv("MQTT_TOPIC_OUTPUT", "reader/output")
-RFID_DEVICE    = os.getenv("RFID_DEVICE", "tmr:///dev/ttyUSB0")
+TOPIC_START    = os.getenv("MQTT_TOPIC_START", "rfid-reader/start")
+TOPIC_STOP     = os.getenv("MQTT_TOPIC_STOP", "rfid-reader/stop")
+TOPIC_OUTPUT   = os.getenv("MQTT_TOPIC_OUTPUT", "rfid-reader/output")
+TOPIC_ERROR   = os.getenv("MQTT_TOPIC_ERROR", "rfid-reader/error")
+RFID_DEVICE    = os.getenv("RFID_DEVICE", "tmr:///dev/ttyUSB-RFID")
 RFID_BAUDRATE  = int(os.getenv("RFID_BAUDRATE", "115200"))
 
 readActive = False
@@ -35,10 +36,10 @@ def readingCallback(tagData):
     global client
     tag = {
         "timestamp":int(time.time()),
-        "epc":tagData.epc,
-        "antenna":tag.antenna,
-        "read_count":tag.read_count,
-        "rssi":tag.rssi
+        "epc":str(tagData.epc),
+        "antenna":tagData.antenna,
+        "read_count":tagData.read_count,
+        "rssi":tagData.rssi
 
     }
     print(json.dumps(tag))
@@ -60,30 +61,43 @@ def on_message(client, userdata, msg):
     
     if topic == TOPIC_START:
         try:
+            filter_epc = None
+            filter_offset = None
             params = json.loads(payload)
-            power     = params.get("power", 25)
+            power     = int(params.get("power", 25))
             region    = params.get("region", "EU3")
             antennas  = params.get("antennas", [1])
-            filter_val= params.get("filter", None)
-            tid_enabled = params.get("tid", False)
-            
-            # Jeśli już działa odczyt, zatrzymaj go przed nowym uruchomieniem
+            filter = params.get("filter", None)
+            bank = params.get("bank", ["epc"])
+            power = power *100
+            if filter is not None:
+                filter_epc = filter.get("epc",None)
+                filter_offset = filter.get("offset",None)
             if readActive is True:            
                 reader.stop_reading()
                 readActive = False
-
+            if filter is None or filter_offset is None:
+                filter_offset = 32
+            else:
+                filter_offset =  int(filter_offset)*4 + 32
+            if filter_epc is not None:
+                filter_epc_hex = filter_epc.encode('utf-8')
+            if filter is not None:
+                reader.set_read_plan(antennas,"GEN2",bank=bank, read_power=power, epc_target={'epc':filter_epc_hex,'bit':filter_offset,'len':len(filter_epc)*4})
+            else:
+                reader.set_read_plan(antennas,"GEN2",bank=bank, read_power=power)
             reader.set_region(region)
-            reader.set_read_plan(antennas, "GEN2", power=power, filter=filter_val, use_tid=tid_enabled)
-            reader.enable_exception_handler(exception_callback)
-            # Uruchomienie wątku odczytu tagów
-            
-            print("Read start with params:", params)
+            reader.enable_exception_handler(exception_handler)
+            reader.start_reading(readingCallback)
+            readActive = True
         except Exception as e:
+            readActive = False
             print("Error during start read:", e)
-    
+            client.publish(TOPIC_ERROR,str(e))
+        
     elif topic == TOPIC_STOP:
         print("Stopping read...")
-        #TODO STOP READ
+        reader.stop_reading()
         readActive = False
 
 def main():

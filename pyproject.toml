@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "python-mercuryapi-mqtt"
+name = "python_mercuryapi_mqtt"
 version = "0.0.1"
 description = "Python mercuryapi mqtt driver"
 authors = ["AFraczkowski"]
